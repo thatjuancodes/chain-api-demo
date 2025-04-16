@@ -1,0 +1,22 @@
+[project]
+name = "chain-api-demo"
+version = "0.1.0"
+description = "LangGraph Chain API Demo"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "langchain",
+    "langchain-openai",
+    "langgraph",
+    "uvicorn",
+    "python-dotenv",
+    "openai",
+    "pydantic"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black"
+]
