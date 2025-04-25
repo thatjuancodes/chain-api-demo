@@ -49,6 +49,12 @@ class GraphState(dict):
     messages: List[Any]
     steps: List[Dict[str, Any]]
 
+# Define our state
+class FinanceGraphState(dict):
+    """The state of our graph."""
+    messages: List[Any]
+    steps: List[Dict[str, Any]]
+
 # Define chain nodes
 def fact_extraction(state: GraphState) -> GraphState:
     """Extract key facts from the user query."""
@@ -80,6 +86,36 @@ def fact_extraction(state: GraphState) -> GraphState:
     
     return state
 
+def fact_finance_extraction(state: FinanceGraphState) -> FinanceGraphState:
+    """Extract key facts from the user query."""
+    messages = state["messages"]
+    
+    # Create a system message for fact extraction
+    system_prompt = """You are a financial expert in venture capital and startup funding. 
+    Given a query, extract the key companies present in the portfolio and the values attached to them.
+    Respond with a concise, structured list of all company records."""
+    
+    # Extract the user query from the last message
+    user_query = messages[-1].content
+    
+    # Run the LLM to extract facts
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_query)
+    ])
+    
+    # Record this step
+    state["steps"].append({
+        "name": "fact_finance_extraction",
+        "input": user_query,
+        "output": response.content
+    })
+    
+    # Add the response to the messages
+    state["messages"].append(AIMessage(content=response.content))
+    
+    return state
+
 def research(state: GraphState) -> GraphState:
     """Research deeper information based on extracted facts."""
     messages = state["messages"]
@@ -99,6 +135,35 @@ def research(state: GraphState) -> GraphState:
     # Record this step
     state["steps"].append({
         "name": "research",
+        "input": facts,
+        "output": response.content
+    })
+    
+    # Add the response to the messages
+    state["messages"].append(AIMessage(content=response.content))
+    
+    return state
+
+def research_finance(state: FinanceGraphState) -> FinanceGraphState:
+    """Research deeper information based on extracted facts."""
+    messages = state["messages"]
+    facts = messages[-1].content
+    
+    # Create a system message for research
+    system_prompt = """You are a financial research expert.
+    Based on the extracted facts, provide deeper context and information about startup funding and venture
+    capital that happened in this quarter.
+    Be thorough but concise, focusing on the most relevant details."""
+    
+    # Run the LLM for research
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"Based on these facts: {facts}, provide deeper research.")
+    ])
+    
+    # Record this step
+    state["steps"].append({
+        "name": "research_finance",
         "input": facts,
         "output": response.content
     })
@@ -137,6 +202,34 @@ def response_generation(state: GraphState) -> GraphState:
     
     return state
 
+def response_finance_generation(state: FinanceGraphState) -> FinanceGraphState:
+    """Generate a final response based on all accumulated information."""
+    messages = state["messages"]
+    research_results = messages[-1].content
+    original_query = messages[0].content
+    
+    # Create a system message for response generation
+    system_prompt = """You are a data scientist.
+    Based on the original query and research, provide an array of json objects that represent the portfolio companies"""
+    
+    # Run the LLM for final response
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"Original query: {original_query}\nResearch: {research_results}\nPlease provide a final response.")
+    ])
+    
+    # Record this step
+    state["steps"].append({
+        "name": "response_finance_generation",
+        "input": f"Query: {original_query}\nResearch: {research_results}",
+        "output": response.content
+    })
+    
+    # Add the response to the messages
+    state["messages"].append(AIMessage(content=response.content))
+    
+    return state
+
 # Create our LangGraph
 def build_graph():
     workflow = StateGraph(GraphState)
@@ -156,8 +249,28 @@ def build_graph():
     
     return workflow.compile()
 
+# Create our LangGraph
+def build_finance_graph():
+    workflow = StateGraph(FinanceGraphState)
+    
+    # Add nodes
+    workflow.add_node("fact_finance_extraction", fact_finance_extraction)
+    workflow.add_node("research_finance", research_finance)
+    workflow.add_node("response_finance_generation", response_finance_generation)
+    
+    # Add edges
+    workflow.add_edge("fact_finance_extraction", "research_finance")
+    workflow.add_edge("research_finance", "response_finance_generation")
+    workflow.add_edge("response_finance_generation", END)
+    
+    # Set entry point
+    workflow.set_entry_point("fact_finance_extraction")
+    
+    return workflow.compile()
+
 # Build our graph 
 chain_graph = build_graph()
+chain_finance_graph = build_finance_graph()
 
 @app.get("/")
 async def root():
@@ -194,6 +307,37 @@ async def run_chain(request: ChainRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/chain/finance", response_model=ChainResponse)
+async def run_chain(request: ChainRequest):
+    try:
+        # Initialize state
+        messages = [HumanMessage(content=request.query)]
+        
+        # Add conversation history if provided
+        if request.conversation_history:
+            for msg in request.conversation_history:
+                if msg["role"] == "user":
+                    messages.append(HumanMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    messages.append(AIMessage(content=msg["content"]))
+        
+        # Set up initial state
+        state = {"messages": messages, "steps": []}
+        
+        # Run the graph
+        result = chain_finance_graph.invoke(state)
+        
+        # Extract the final response from the last AI message
+        final_response = result["messages"][-1].content
+        
+        return {
+            "response": final_response,
+            "steps": result["steps"]
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=True) 

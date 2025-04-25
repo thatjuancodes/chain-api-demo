@@ -27,7 +27,7 @@ function App() {
       ];
       
       // Call our API endpoint
-      const result = await axios.post('/api/chain', {
+      const result = await axios.post('/api/chain/finance', {
         query,
         conversation_history: conversationHistory
       });
