@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
 from typing import List, Dict, Any, Optional
+import fitz  # PyMuPDF
 
 # LangChain imports
 from langchain_openai import ChatOpenAI
@@ -337,6 +338,61 @@ async def run_chain(request: ChainRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/process_pdf", response_model=ChainResponse)
+async def process_pdf(file: UploadFile = File(...)):
+    """
+    Accepts a PDF file upload, extracts text using PyMuPDF, 
+    runs the text through the finance chain graph, and returns the result.
+    """
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF.")
+
+    try:
+        # Read the file content
+        contents = await file.read()
+        
+        # Open the PDF using PyMuPDF
+        doc = fitz.open(stream=contents, filetype="pdf")
+        
+        extracted_text = ""
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            extracted_text += page.get_text()
+            
+        doc.close()
+
+        if not extracted_text.strip():
+            # Handle case where no text could be extracted
+            # Option 1: Raise an error
+            # raise HTTPException(status_code=400, detail="No text could be extracted from the PDF.")
+            # Option 2: Return empty response (or specific message)
+             return {
+                 "response": "No text could be extracted from the PDF.",
+                 "steps": []
+             }
+
+        # Now, run the extracted text through the finance chain graph
+        initial_state = {
+            "messages": [HumanMessage(content=extracted_text)],
+            "steps": []
+        }
+        
+        # Run the graph - CHANGED TO USE chain_graph
+        result = chain_finance_graph.invoke(initial_state)
+        
+        # Extract the final response from the last AI message
+        final_response = result["messages"][-1].content
+        
+        return {
+            "response": final_response,
+            "steps": result["steps"]
+        }
+
+    except Exception as e:
+        # Log the exception for debugging
+        print(f"Error processing PDF {file.filename}: {e}") 
+        raise HTTPException(status_code=500, detail=f"Error processing PDF: {e}")
 
 if __name__ == "__main__":
     import uvicorn

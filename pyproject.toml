@@ -12,7 +12,9 @@ dependencies = [
     "uvicorn",
     "python-dotenv",
     "openai",
-    "pydantic"
+    "pydantic",
+    "pymupdf",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]
