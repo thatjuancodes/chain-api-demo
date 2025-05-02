@@ -1,3 +1,19 @@
+html,
+body,
+#root { /* Assuming your root div has id="root" in index.html */
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Optional: If using flex column layout, make main content area flexible */
+main {
+  flex-grow: 1; 
+  /* Add overflow handling if content might exceed viewport */
+  overflow-y: auto;
+  padding: 1rem; /* Add some padding inside main */
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
