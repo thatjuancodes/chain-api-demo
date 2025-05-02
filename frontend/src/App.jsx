@@ -13,6 +13,7 @@ function App() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
   const [inputMode, setInputMode] = useState('pdf'); // Default to PDF mode
+  const [isResultsCollapsed, setIsResultsCollapsed] = useState(true); // Default to collapsed
 
   const handleModeChange = (mode) => {
     setInputMode(mode);
@@ -25,6 +26,7 @@ function App() {
     setLoading(false);
     setPdfLoading(false);
     setConversationHistory([]); // Clear history on mode change for simplicity now
+    setIsResultsCollapsed(true); // Collapse results when changing mode
     const fileInput = document.getElementById('pdf-file-input');
     if (fileInput) {
       fileInput.value = '';
@@ -69,6 +71,9 @@ function App() {
     } finally {
       setLoading(false);
       setQuery('');
+      if (conversationHistory.length > 0 || steps.length > 0) {
+         setIsResultsCollapsed(false); // Expand results after submission if there are results
+      }
     }
   };
 
@@ -103,6 +108,9 @@ function App() {
       setPdfLoading(false);
       setSelectedFile(null);
       if(e.target.reset) e.target.reset(); // Reset form to clear file input
+      if (conversationHistory.length > 0 || steps.length > 0) {
+          setIsResultsCollapsed(false); // Expand results after submission if there are results
+      }
     }
   };
 
@@ -222,65 +230,87 @@ function App() {
           )}
         </div>
         
-        {/* Results Area - Separated from Tab content for consistent visibility */} 
-        <div className="results-area mt-4 flex-grow-1 overflow-auto">
-          {/* Conversation History */} 
-          {conversationHistory.length > 0 && (
-            <div className="mb-4">
-              <h2>Conversation</h2>
-              {conversationHistory.map((msg, idx) => (
-                <div 
-                  key={idx} 
-                  className={`card mb-2 ${msg.role === 'user' ? 'border-primary' : 'border-secondary'}`}>
-                  <div className={`card-body ${msg.role === 'user' ? 'text-primary' : 'text-dark'}`}>
-                     <p className="mb-0"><strong>{msg.role === 'user' ? 'You' : 'Assistant'}:</strong></p>
-                     <p className="mb-0" style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Results Area - Separated and Collapsible */} 
+        {(conversationHistory.length > 0 || steps.length > 0 || error || pdfError) && (
+          <div className="results-container mt-4">
+            <button 
+              className="btn btn-outline-secondary w-100 mb-2" 
+              type="button"
+              onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
+              aria-expanded={!isResultsCollapsed} 
+              aria-controls="resultsCollapseArea"
+            >
+              {isResultsCollapsed ? 'Show Results' : 'Hide Results'} (Conversation & Steps)
+            </button>
+            <div 
+              className={`collapse ${!isResultsCollapsed ? 'show' : ''}`}
+              id="resultsCollapseArea"
+            >
+              <div className="results-area flex-grow-1 overflow-auto p-3 border rounded bg-light">
+                  {/* Errors shown inside collapsible area too */} 
+                  {error && <div className="alert alert-danger">Text Input Error: {error}</div>}
+                  {pdfError && <div className="alert alert-danger">PDF Error: {pdfError}</div>}
 
-          {/* Chain Processing Steps */} 
-          {steps.length > 0 && (
-            <div className="mb-4">
-              <h2>Chain Processing Steps</h2>
-               <div className="accordion" id="stepsAccordion">
-                 {steps.map((step, idx) => (
-                   <div className="accordion-item" key={idx}>
-                    <h2 className="accordion-header" id={`heading-${idx}`}>
-                      <button 
-                        className="accordion-button collapsed" 
-                        type="button" 
-                        data-bs-toggle="collapse" 
-                        data-bs-target={`#collapse-${idx}`} 
-                        aria-expanded="false" 
-                        aria-controls={`collapse-${idx}`}>
-                        Step {idx + 1}: {step.name}
-                      </button>
-                    </h2>
-                    <div 
-                      id={`collapse-${idx}`} 
-                      className="accordion-collapse collapse" 
-                      aria-labelledby={`heading-${idx}`} 
-                      data-bs-parent="#stepsAccordion">
-                      <div className="accordion-body">
-                        <div className="mb-3">
-                           <h5>Input:</h5>
-                           <pre className="bg-light p-2 border rounded"><code>{typeof step.input === 'object' ? JSON.stringify(step.input, null, 2) : step.input}</code></pre>
-                         </div>
-                         <div>
-                           <h5>Output:</h5>
-                           <pre className="bg-light p-2 border rounded"><code>{typeof step.output === 'object' ? JSON.stringify(step.output, null, 2) : step.output}</code></pre>
-                         </div>
-                      </div>
+                  {/* Conversation History */} 
+                  {conversationHistory.length > 0 && (
+                    <div className="mb-4">
+                      <h2>Conversation</h2>
+                      {conversationHistory.map((msg, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`card mb-2 ${msg.role === 'user' ? 'border-primary' : 'border-secondary'}`}>
+                          <div className={`card-body ${msg.role === 'user' ? 'text-primary' : 'text-dark'}`}>
+                             <p className="mb-0"><strong>{msg.role === 'user' ? 'You' : 'Assistant'}:</strong></p>
+                             <p className="mb-0" style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                 ))}
-              </div> 
+                  )}
+
+                  {/* Chain Processing Steps */} 
+                  {steps.length > 0 && (
+                    <div className="mb-4">
+                      <h2>Chain Processing Steps</h2>
+                       <div className="accordion" id="stepsAccordion">
+                         {steps.map((step, idx) => (
+                           <div className="accordion-item" key={idx}>
+                            <h2 className="accordion-header" id={`heading-${idx}`}>
+                              <button 
+                                className="accordion-button collapsed" 
+                                type="button" 
+                                data-bs-toggle="collapse" 
+                                data-bs-target={`#collapse-${idx}`} 
+                                aria-expanded="false" 
+                                aria-controls={`collapse-${idx}`}>
+                                Step {idx + 1}: {step.name}
+                              </button>
+                            </h2>
+                            <div 
+                              id={`collapse-${idx}`} 
+                              className="accordion-collapse collapse" 
+                              aria-labelledby={`heading-${idx}`} 
+                              data-bs-parent="#stepsAccordion">
+                              <div className="accordion-body">
+                                <div className="mb-3">
+                                   <h5>Input:</h5>
+                                   <pre className="bg-light p-2 border rounded"><code>{typeof step.input === 'object' ? JSON.stringify(step.input, null, 2) : step.input}</code></pre>
+                                 </div>
+                                 <div>
+                                   <h5>Output:</h5>
+                                   <pre className="bg-light p-2 border rounded"><code>{typeof step.output === 'object' ? JSON.stringify(step.output, null, 2) : step.output}</code></pre>
+                                 </div>
+                              </div>
+                            </div>
+                          </div>
+                         ))}
+                      </div> 
+                    </div>
+                  )}
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );

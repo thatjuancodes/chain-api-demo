@@ -1,6 +1,5 @@
 html,
-body,
-#root { /* Assuming your root div has id="root" in index.html */
+body { /* Removed #root from here */
   height: 100%;
   margin: 0;
   padding: 0;
